@@ -8,6 +8,7 @@ Không ghi file trên server: mọi export trả thẳng về browser.
 import os, io, re, csv, json, uuid, tempfile, traceback
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, Response
+from PIL import Image, ImageOps
 
 # ── Đọc lookup files ngay khi import ─────────────────────────────────────────
 _DIR = Path(__file__).parent
@@ -26,7 +27,7 @@ import cv2, numpy as np
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder=None)
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB max upload
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB max upload
 
 # ── Đọc HTML frontend (nhúng sẵn) ────────────────────────────────────────────
 _HTML_PATH = _DIR / "static" / "index.html"
@@ -64,9 +65,34 @@ def api_ocr():
     try:
         f.save(str(tmp))
 
-        img_orig = cv2.imread(str(tmp))
+        # ── Preprocess: fix EXIF rotation + resize ảnh DT lớn ──────────────
+        tmp_jpg = Path(tempfile.gettempdir()) / (str(uuid.uuid4()) + ".jpg")
+        try:
+            pil_img = Image.open(str(tmp))
+            # Fix EXIF orientation (ảnh chụp dọc trên DT hay bị xoay)
+            pil_img = ImageOps.exif_transpose(pil_img)
+            # Convert HEIC/WEBP/PNG → RGB JPEG
+            if pil_img.mode in ("RGBA", "P", "LA"):
+                pil_img = pil_img.convert("RGB")
+            elif pil_img.mode != "RGB":
+                pil_img = pil_img.convert("RGB")
+            # Resize nếu quá lớn (DT chụp 12MP+ = ~4000px)
+            MAX_DIM = 2400
+            w, h = pil_img.size
+            if max(w, h) > MAX_DIM:
+                ratio = MAX_DIM / max(w, h)
+                pil_img = pil_img.resize((int(w*ratio), int(h*ratio)), Image.LANCZOS)
+            # Save as JPEG quality 88 — giảm từ 10MB xuống ~1MB
+            pil_img.save(str(tmp_jpg), "JPEG", quality=88, optimize=True)
+            ocr_path = str(tmp_jpg)
+        except Exception as pil_err:
+            app.logger.warning(f"PIL preprocess failed: {pil_err}, dùng file gốc")
+            ocr_path = str(tmp)
+            tmp_jpg = None
+
+        img_orig = cv2.imread(ocr_path)
         if img_orig is None:
-            return jsonify(error="Không đọc được ảnh"), 400
+            return jsonify(error="Không đọc được ảnh — định dạng không hỗ trợ"), 400
 
         method_parts = []
 
@@ -76,7 +102,7 @@ def api_ocr():
             method_parts.append("QR")
 
         # 2. OCR
-        lines = oc.ocr_via_api(str(tmp))
+        lines = oc.ocr_via_api(ocr_path)
         if not lines:
             return jsonify(error="OCR không trả về kết quả — kiểm tra API key"), 422
         method_parts.append("OCR")
@@ -112,6 +138,9 @@ def api_ocr():
 
     finally:
         try: tmp.unlink()
+        except: pass
+        try:
+            if 'tmp_jpg' in dir() and tmp_jpg and tmp_jpg.exists(): tmp_jpg.unlink()
         except: pass
 
 
