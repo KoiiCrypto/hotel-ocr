@@ -33,6 +33,83 @@ app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB max upload
 _HTML_PATH = _DIR / "static" / "index.html"
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  ENHANCED QR READER
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _read_qr_enhanced(img_bgr):
+    """
+    Thử nhiều kỹ thuật để đọc QR — tăng tỉ lệ thành công với ảnh DT.
+    Thứ tự: OpenCV detector → wechat → preprocessed variants
+    """
+    import ocrspace as oc
+
+    if img_bgr is None:
+        return None
+
+    # ── Thử 1: OpenCV QRCodeDetector thường (nhanh nhất) ──
+    result = oc.read_qr(img_bgr)
+    if result:
+        return result
+
+    h, w = img_bgr.shape[:2]
+
+    # ── Thử 2: WeChatQRCode (chính xác hơn, cần module extra) ──
+    try:
+        detector = cv2.wechat_qrcode_WeChatQRCode()
+        texts, _ = detector.detectAndDecode(img_bgr)
+        for t in (texts or []):
+            if t and "|" in t:
+                parsed = oc.parse_qr_text(t) if hasattr(oc, "parse_qr_text") else None
+                if parsed:
+                    return parsed
+    except Exception:
+        pass
+
+    # ── Thử 3: Các biến thể tiền xử lý ảnh ──
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    variants = []
+
+    # 3a. Sharpen
+    kernel = np.array([[0,-1,0],[-1,5,-1],[0,-1,0]])
+    variants.append(("sharpen", cv2.filter2D(gray, -1, kernel)))
+
+    # 3b. CLAHE tăng contrast
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    variants.append(("clahe", clahe.apply(gray)))
+
+    # 3c. Adaptive threshold
+    variants.append(("thresh", cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)))
+
+    # 3d. Upscale 1.5x nếu ảnh nhỏ
+    if max(h, w) < 1500:
+        up = cv2.resize(gray, (int(w*1.5), int(h*1.5)), interpolation=cv2.INTER_CUBIC)
+        variants.append(("upscale", up))
+
+    # 3e. Invert (QR nền tối chữ sáng)
+    variants.append(("invert", cv2.bitwise_not(gray)))
+
+    qr_det = cv2.QRCodeDetector()
+    for name, variant in variants:
+        # convert back to BGR nếu cần
+        if len(variant.shape) == 2:
+            v_bgr = cv2.cvtColor(variant, cv2.COLOR_GRAY2BGR)
+        else:
+            v_bgr = variant
+        text, _, _ = qr_det.detectAndDecode(v_bgr)
+        if text and "|" in text:
+            app.logger.info(f"QR decoded via variant: {name}")
+            parsed = oc.parse_qr_text(text) if hasattr(oc, "parse_qr_text") else None
+            if not parsed:
+                # fallback: gọi read_qr trên ảnh variant
+                parsed = oc.read_qr(v_bgr)
+            if parsed:
+                return parsed
+
+    return None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -65,39 +142,50 @@ def api_ocr():
     try:
         f.save(str(tmp))
 
-        # ── Preprocess: fix EXIF rotation + resize ảnh DT lớn ──────────────
+        # ── Bước 1: load ảnh gốc full-res để đọc QR ─────────────────────────
+        tmp_jpg = None
+        img_full = None
+        try:
+            pil_orig = Image.open(str(tmp))
+            pil_orig = ImageOps.exif_transpose(pil_orig)       # fix xoay EXIF
+            if pil_orig.mode not in ("RGB",):
+                pil_orig = pil_orig.convert("RGB")
+            # Để đọc QR: dùng ảnh full-res, chỉ upscale nếu quá nhỏ
+            w0, h0 = pil_orig.size
+            qr_pil = pil_orig
+            if max(w0, h0) < 1000:                             # ảnh nhỏ → upscale
+                scale = 1000 / max(w0, h0)
+                qr_pil = pil_orig.resize((int(w0*scale), int(h0*scale)), Image.LANCZOS)
+            img_full = cv2.cvtColor(np.array(qr_pil), cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            app.logger.warning(f"Load full-res failed: {e}")
+
+        # ── Bước 2: resize + compress để gửi OCR API ─────────────────────────
         tmp_jpg = Path(tempfile.gettempdir()) / (str(uuid.uuid4()) + ".jpg")
         try:
-            pil_img = Image.open(str(tmp))
-            # Fix EXIF orientation (ảnh chụp dọc trên DT hay bị xoay)
-            pil_img = ImageOps.exif_transpose(pil_img)
-            # Convert HEIC/WEBP/PNG → RGB JPEG
-            if pil_img.mode in ("RGBA", "P", "LA"):
-                pil_img = pil_img.convert("RGB")
-            elif pil_img.mode != "RGB":
-                pil_img = pil_img.convert("RGB")
-            # Resize nếu quá lớn (DT chụp 12MP+ = ~4000px)
             MAX_DIM = 2400
-            w, h = pil_img.size
+            w, h = pil_orig.size
+            pil_ocr = pil_orig
             if max(w, h) > MAX_DIM:
                 ratio = MAX_DIM / max(w, h)
-                pil_img = pil_img.resize((int(w*ratio), int(h*ratio)), Image.LANCZOS)
-            # Save as JPEG quality 88 — giảm từ 10MB xuống ~1MB
-            pil_img.save(str(tmp_jpg), "JPEG", quality=88, optimize=True)
+                pil_ocr = pil_orig.resize((int(w*ratio), int(h*ratio)), Image.LANCZOS)
+            pil_ocr.save(str(tmp_jpg), "JPEG", quality=88, optimize=True)
             ocr_path = str(tmp_jpg)
         except Exception as pil_err:
-            app.logger.warning(f"PIL preprocess failed: {pil_err}, dùng file gốc")
+            app.logger.warning(f"PIL resize failed: {pil_err}, dùng file gốc")
             ocr_path = str(tmp)
             tmp_jpg = None
 
-        img_orig = cv2.imread(ocr_path)
+        # img_orig cho cv2 dùng ảnh đã resize (đủ cho OCR text)
+        img_orig = cv2.imread(ocr_path) if ocr_path != str(tmp) else img_full
         if img_orig is None:
             return jsonify(error="Không đọc được ảnh — định dạng không hỗ trợ"), 400
 
         method_parts = []
 
-        # 1. QR
-        qr_info = oc.read_qr(img_orig)
+        # 1. QR — dùng ảnh FULL RES để tăng độ chính xác
+        qr_img = img_full if img_full is not None else img_orig
+        qr_info = _read_qr_enhanced(qr_img)
         if qr_info:
             method_parts.append("QR")
 
