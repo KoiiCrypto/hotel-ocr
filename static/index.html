@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Hotel OCR — Khai báo lưu trú</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1117;--sur:#161b22;--sur2:#1c2330;--bdr:#30363d;--acc:#f78166;--blu:#79c0ff;--grn:#56d364;--txt:#e6edf3;--mut:#8b949e;--gld:#e3b341;--r:12px;--fn:'Be Vietnam Pro',sans-serif;--mn:'Space Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:var(--fn);min-height:100vh}
+.hdr{background:linear-gradient(135deg,#1a2332,#0d1117);border-bottom:1px solid var(--bdr);padding:14px 20px;position:sticky;top:0;z-index:100}
+.hdr-in{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.logo{width:34px;height:34px;background:linear-gradient(135deg,var(--acc),var(--gld));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.hdr h1{font-size:15px;font-weight:700}.hdr p{font-size:11px;color:var(--mut);margin-top:1px}
+.be-badge{margin-left:auto;background:rgba(86,211,100,.15);color:var(--grn);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;font-family:var(--mn);white-space:nowrap}
+.tabs{max-width:760px;margin:0 auto;padding:14px 16px 0;display:flex;gap:8px}
+.tab{flex:1;padding:9px 8px;border-radius:9px;border:1px solid var(--bdr);background:var(--sur);color:var(--mut);font-family:var(--fn);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px}
+.tab.active{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+.tab:not(.active):hover{border-color:var(--blu);color:var(--blu)}
+.main{max-width:760px;margin:0 auto;padding:14px}
+.panel{display:none}.panel.active{display:block}
+.up-zone{border:2px dashed var(--bdr);border-radius:var(--r);padding:28px 20px;text-align:center;cursor:pointer;transition:all .25s;position:relative;background:var(--sur)}
+.up-zone:hover,.up-zone.over{border-color:var(--acc);background:rgba(247,129,102,.06)}
+.up-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.up-zone .ic{font-size:32px;margin-bottom:8px}.up-zone h3{font-size:14px;font-weight:600;margin-bottom:4px}
+.up-zone p{font-size:11px;color:var(--mut)}
+.gs{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:14px;margin-top:12px}
+.gs h3{font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.fl{display:flex;flex-direction:column;gap:4px}
+.fl label{font-size:10px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+.fl input,.fl select{background:var(--bg);border:1px solid var(--bdr);border-radius:7px;color:var(--txt);font-family:var(--fn);font-size:13px;padding:8px 10px;outline:none;transition:border-color .2s;width:100%}
+.fl input:focus,.fl select:focus{border-color:var(--blu)}
+.fh{font-size:9px;color:var(--mut);margin-top:1px}
+.fc{grid-column:1/-1}
+.dhint{font-size:9px;color:var(--gld);margin-top:2px}
+.q-hdr{display:flex;justify-content:space-between;align-items:center;margin:14px 0 9px}
+.q-hdr h3{font-size:12px;font-weight:600}
+.qbadge{background:var(--acc);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;font-family:var(--mn)}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;margin-bottom:10px;transition:border-color .2s}
+.card.processing{border-color:var(--gld)}.card.done{border-color:var(--grn)}.card.error{border-color:var(--acc)}
+.c-hdr{display:flex;align-items:center;gap:9px;padding:11px 13px;cursor:pointer;user-select:none}
+.c-thumb{width:48px;height:48px;border-radius:7px;object-fit:cover;border:1px solid var(--bdr);flex-shrink:0}
+.c-info{flex:1;min-width:0}
+.c-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-status{font-size:10px;margin-top:2px;display:flex;align-items:center;gap:4px}
+.sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.sdot.pending{background:var(--mut)}.sdot.processing{background:var(--gld);animation:pulse 1s infinite}
+.sdot.done{background:var(--grn)}.sdot.error{background:var(--acc)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.chev{color:var(--mut);transition:transform .2s;font-size:11px}
+.card.exp .chev{transform:rotate(180deg)}
+.c-body{display:none;border-top:1px solid var(--bdr);padding:13px}
+.card.exp .c-body{display:block}
+.spl{display:flex;gap:12px}
+.l-side{flex:1;min-width:0}
+.l-side img{width:100%;border-radius:7px;border:1px solid var(--bdr)}
+.raw-txt{margin-top:7px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:8px;font-family:var(--mn);font-size:9px;color:var(--mut);max-height:100px;overflow-y:auto;white-space:pre-wrap;line-height:1.5}
+.r-side{flex:1;min-width:0}
+@media(max-width:520px){.spl{flex-direction:column}.l-side img{max-height:170px;object-fit:contain;background:var(--bg)}}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.fgrid .fc{grid-column:1/-1}
+.fgt{font-size:9px;font-weight:700;color:var(--blu);text-transform:uppercase;letter-spacing:.6px;margin:9px 0 5px;grid-column:1/-1}
+.src-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px;padding:7px 9px;background:var(--bg);border-radius:7px;border:1px solid var(--bdr)}
+.src-row span.lbl{font-size:9px;color:var(--mut)}
+.stag{font-size:9px;padding:1px 5px;border-radius:4px;font-family:var(--mn);font-weight:700}
+.stag.QR{background:rgba(227,179,65,.2);color:var(--gld)}
+.stag.MRZ{background:rgba(121,192,255,.2);color:var(--blu)}
+.stag.OCR{background:rgba(86,211,100,.2);color:var(--grn)}
+.ocr-btn{width:100%;padding:9px;border-radius:8px;border:none;cursor:pointer;font-family:var(--fn);font-size:12px;font-weight:700;background:linear-gradient(135deg,var(--blu),#4a90d9);color:var(--bg);transition:opacity .2s;margin-bottom:9px;display:flex;align-items:center;justify-content:center;gap:6px}
+.ocr-btn:hover{opacity:.88}.ocr-btn:disabled{opacity:.4;cursor:not-allowed}
+.spin{width:12px;height:12px;border:2px solid rgba(0,0,0,.3);border-top-color:var(--bg);border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.proc-btn{width:100%;padding:13px;border-radius:var(--r);border:none;cursor:pointer;font-family:var(--fn);font-size:14px;font-weight:700;background:linear-gradient(135deg,var(--acc),#e07050);color:#fff;transition:all .2s;margin-top:5px;display:flex;align-items:center;justify-content:center;gap:7px;box-shadow:0 4px 20px rgba(247,129,102,.3)}
+.proc-btn:hover{transform:translateY(-1px)}.proc-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.empty{text-align:center;padding:50px 20px;color:var(--mut)}
+.empty .eic{font-size:40px;margin-bottom:10px}
+.tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--bdr)}
+table{width:100%;border-collapse:collapse;font-size:11px;min-width:580px}
+th{background:var(--sur2);padding:9px 11px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);border-bottom:1px solid var(--bdr);white-space:nowrap}
+td{padding:9px 11px;border-bottom:1px solid var(--bdr);vertical-align:top}
+tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.02)}
+.bx{display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;font-family:var(--mn)}
+.b-hc{background:rgba(121,192,255,.15);color:var(--blu)}.b-vn{background:rgba(86,211,100,.15);color:var(--grn)}
+.stats{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap}
+.sc{flex:1;min-width:72px;background:var(--sur);border:1px solid var(--bdr);border-radius:9px;padding:9px 11px;text-align:center}
+.sn{font-size:20px;font-weight:700;font-family:var(--mn)}.sl{font-size:9px;color:var(--mut);margin-top:2px}
+.exp-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.eb{flex:1;min-width:90px;padding:10px 12px;border-radius:9px;border:1px solid var(--bdr);background:var(--sur);color:var(--txt);font-family:var(--fn);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px}
+.eb:hover{border-color:var(--grn);color:var(--grn)}.eb.xml:hover{border-color:var(--blu);color:var(--blu)}.eb.csv:hover{border-color:var(--gld);color:var(--gld)}.eb:disabled{opacity:.3;cursor:not-allowed}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(70px);background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;padding:10px 18px;font-size:12px;font-weight:500;z-index:999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.toast.show{transform:translateX(-50%) translateY(0)}.toast.ok{border-color:var(--grn);color:var(--grn)}.toast.err{border-color:var(--acc);color:var(--acc)}.toast.info{border-color:var(--blu);color:var(--blu)}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:3px}
+.no-img{text-align:center;padding:32px 18px;color:var(--mut);border:1px dashed var(--bdr);border-radius:var(--r);font-size:12px;margin-top:12px}
+.del-btn{background:none;border:none;color:var(--mut);cursor:pointer;font-size:15px;padding:4px;border-radius:4px;transition:color .2s;flex-shrink:0}.del-btn:hover{color:var(--acc)}
+.prog-bar{height:3px;background:var(--bdr);border-radius:2px;margin-bottom:12px;overflow:hidden;display:none}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--acc),var(--gld));border-radius:2px;transition:width .3s}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-in">
+    <div class="logo">🏨</div>
+    <div><h1>Hotel OCR</h1><p>Khai báo lưu trú · QR · MRZ · OCR.space</p></div>
+    <div class="be-badge">🐍 Flask + Gunicorn</div>
+  </div>
+</div>
+<div class="tabs">
+  <button class="tab active" onclick="sw('upload')" id="tab-upload">📷 Upload</button>
+  <button class="tab" onclick="sw('results')" id="tab-results">📊 Kết quả <span id="rbadge" style="display:none" class="qbadge">0</span></button>
+</div>
+<div class="main">
+  <div class="panel active" id="panel-upload">
+    <div class="up-zone" id="dz">
+      <input type="file" id="fi" multiple accept="image/*" capture="environment" onchange="handleFiles(this.files)">
+      <div class="ic">📸</div>
+      <h3>Chụp hoặc chọn ảnh CCCD / Hộ chiếu</h3>
+      <p>Python backend · QR chip · MRZ · OCR.space · Nhiều ảnh cùng lúc</p>
+    </div>
+    <div class="gs">
+      <h3>⚙️ Cài đặt chung</h3>
+      <div class="sg">
+        <div class="fl"><label>Check-in</label><input type="text" id="g-ci" placeholder="15, 0302, 03022026…" oninput="uh(this,'hci',false)"><div class="dhint" id="hci"></div></div>
+        <div class="fl"><label>Check-out</label><input type="text" id="g-co" placeholder="20, 1003, 10032026…" oninput="uh(this,'hco',true)"><div class="dhint" id="hco"></div></div>
+        <div class="fl"><label>Số phòng</label><input type="text" id="g-phong" placeholder="101, A202…"></div>
+        <div class="fl"><label>Lý do lưu trú</label><input type="text" id="g-lydo" value="Du Lịch"></div>
+        <div class="fl fc"><label>OCR API Key (ocr.space)</label><input type="text" id="g-key" value="K84757334988957"><div class="fh">Miễn phí · 25,000 req/tháng · ocr.space</div></div>
+      </div>
+    </div>
+    <div id="q-sec" style="display:none">
+      <div class="q-hdr"><h3>Danh sách ảnh</h3><span class="qbadge" id="qbadge">0</span></div>
+      <div class="prog-bar" id="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+      <div id="img-q"></div>
+      <button class="proc-btn" id="proc-btn" onclick="processAll()">🚀 OCR &amp; Xử lý tất cả</button>
+    </div>
+    <div id="no-img" class="no-img">Chưa có ảnh. Nhấn vùng trên để chọn hoặc kéo thả.</div>
+  </div>
+
+  <div class="panel" id="panel-results">
+    <div class="stats" id="stats" style="display:none">
+      <div class="sc"><div class="sn" id="st-tot">0</div><div class="sl">Tổng khách</div></div>
+      <div class="sc"><div class="sn" id="st-vn" style="color:var(--grn)">0</div><div class="sl">CCCD/CMND</div></div>
+      <div class="sc"><div class="sn" id="st-hc" style="color:var(--blu)">0</div><div class="sl">Hộ chiếu</div></div>
+      <div class="sc" id="st-qt-c" style="display:none"><div class="sn" id="st-qt" style="color:var(--gld);font-size:12px"></div><div class="sl">Quốc tịch HC</div></div>
+    </div>
+    <div class="exp-row">
+      <button class="eb csv" onclick="expCSV()" id="b-csv" disabled>⬇️ CSV</button>
+      <button class="eb xml" onclick="expXML()" id="b-xml" disabled>⬇️ XML (HC)</button>
+      <button class="eb" onclick="expXL()" id="b-xl" disabled>⬇️ Excel .xlsx (VN)</button>
+    </div>
+    <div id="res-c"><div class="empty"><div class="eic">📋</div><p>Chưa có kết quả.<br>Upload ảnh và bấm OCR.</p></div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const S = { imgs: [] };
+
+function sw(t) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+t).classList.add('active');
+  document.getElementById('tab-'+t).classList.add('active');
+  if (t==='results') renderResults();
+}
+
+function pDate(s, isCO=false) {
+  if (!s) return '';
+  s = s.trim();
+  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth()+1, cd=now.getDate();
+  const p=n=>String(n).padStart(2,'0');
+  let m;
+  m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/); if(m){const[,d,mo,y]=m.map(Number);if(d>=1&&d<=31&&mo>=1&&mo<=12)return`${p(d)}/${p(mo)}/${y}`;}
+  m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})$/); if(m){let[,d,mo,y]=m.map(Number);y=y<30?2000+y:1900+y;if(d>=1&&d<=31&&mo>=1&&mo<=12)return`${p(d)}/${p(mo)}/${y}`;}
+  m=s.match(/^(\d{2})(\d{2})(\d{4})$/); if(m){const[,d,mo,y]=m.map(Number);if(d>=1&&d<=31&&mo>=1&&mo<=12&&y>=1900&&y<=2100)return`${p(d)}/${p(mo)}/${y}`;}
+  m=s.match(/^(\d{2})(\d{2})(\d{2})$/); if(m){let[,d,mo,y]=m.map(Number);y=y<30?2000+y:1900+y;if(d>=1&&d<=31&&mo>=1&&mo<=12)return`${p(d)}/${p(mo)}/${y}`;}
+  m=s.match(/^(\d{2})(\d{2})$/); if(m){const[,d,mo]=m.map(Number);if(d>=1&&d<=31&&mo>=1&&mo<=12){let y=cy;if(isCO&&mo<cm)y=cy+1;return`${p(d)}/${p(mo)}/${y}`;}}
+  if(/^\d{1,2}$/.test(s)){const d=parseInt(s);if(d>=1&&d<=31){let mo=cm,y=cy;if(isCO&&d<cd){mo=cm===12?1:cm+1;if(cm===12)y=cy+1;}return`${p(d)}/${p(mo)}/${y}`;}}
+  return '';
+}
+function uh(el,hid,isCO){
+  const p=pDate(el.value,isCO),t=isCO?' 11:00:00':' 15:00:00';
+  document.getElementById(hid).textContent=p?'→ '+p+t:(el.value?'⚠ Không nhận ra':'');
+}
+
+const dz=document.getElementById('dz');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');handleFiles(e.dataTransfer.files)});
+
+function handleFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    const id = Date.now()+Math.random().toString(36).slice(2);
+    S.imgs.push({id, file:f, url:URL.createObjectURL(f), status:'pending', data:null});
+  }
+  renderQ();
+}
+
+function renderQ() {
+  const q=document.getElementById('img-q'), sec=document.getElementById('q-sec'), nm=document.getElementById('no-img');
+  document.getElementById('qbadge').textContent=S.imgs.length;
+  if (!S.imgs.length){sec.style.display='none';nm.style.display='block';return;}
+  sec.style.display='block'; nm.style.display='none';
+  const ex=new Set(Array.from(q.querySelectorAll('.card')).map(e=>e.dataset.id));
+  S.imgs.forEach(img=>{ if(!ex.has(img.id)) q.appendChild(mkCard(img)); });
+}
+
+function mkCard(img) {
+  const c=document.createElement('div');
+  c.className='card'; c.dataset.id=img.id;
+  c.innerHTML=`
+    <div class="c-hdr" onclick="tog('${img.id}')">
+      <img class="c-thumb" src="${img.url}">
+      <div class="c-info">
+        <div class="c-name">${img.file.name}</div>
+        <div class="c-status"><div class="sdot pending" id="dot-${img.id}"></div><span id="st-${img.id}">Chờ xử lý</span></div>
+      </div>
+      <button class="del-btn" onclick="delImg(event,'${img.id}')">✕</button>
+      <span class="chev">▼</span>
+    </div>
+    <div class="c-body">
+      <div class="spl">
+        <div class="l-side">
+          <img src="${img.url}" style="max-height:190px;object-fit:contain;width:100%;background:var(--bg)">
+          <div class="raw-txt" id="raw-${img.id}" style="display:none"></div>
+        </div>
+        <div class="r-side" id="form-${img.id}">
+          <button class="ocr-btn" id="btn-${img.id}" onclick="runOCR('${img.id}')">🔍 Chạy OCR</button>
+          <div id="flds-${img.id}"></div>
+        </div>
+      </div>
+    </div>`;
+  return c;
+}
+
+function tog(id){document.querySelector(`.card[data-id="${id}"]`)?.classList.toggle('exp');}
+function delImg(e,id){e.stopPropagation();S.imgs=S.imgs.filter(i=>i.id!==id);document.querySelector(`.card[data-id="${id}"]`)?.remove();renderQ();}
+
+async function runOCR(id) {
+  const img=S.imgs.find(i=>i.id===id); if(!img) return;
+  setSt(id,'processing','Đang xử lý…');
+  const btn=document.getElementById('btn-'+id);
+  btn.disabled=true; btn.innerHTML='<div class="spin"></div> Python đang xử lý…';
+  try {
+    const fd = new FormData();
+    fd.append('image',   img.file);
+    fd.append('checkin', document.getElementById('g-ci').value);
+    fd.append('checkout',document.getElementById('g-co').value);
+    fd.append('phong',   document.getElementById('g-phong').value);
+    fd.append('lydo',    document.getElementById('g-lydo').value);
+    fd.append('apikey',  document.getElementById('g-key').value);
+
+    const resp = await fetch('/api/ocr', {method:'POST', body:fd});
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error||'Server error '+resp.status);
+
+    img.data = result.data;
+    img.data._src = result.sources;
+
+    const rawEl=document.getElementById('raw-'+id);
+    rawEl.textContent=(result.raw_lines||[]).join('\n');
+    rawEl.style.display='block';
+
+    renderForm(id, img.data);
+    setSt(id,'done','✓ '+result.method);
+    btn.innerHTML='🔄 OCR lại'; btn.disabled=false;
+    document.querySelector(`.card[data-id="${id}"]`)?.classList.add('exp');
+    toast('✅ '+img.file.name+' · '+result.method,'ok');
+  } catch(err) {
+    setSt(id,'error','Lỗi: '+err.message);
+    btn.innerHTML='🔍 Thử lại'; btn.disabled=false;
+    toast('❌ '+err.message,'err');
+  }
+}
+
+async function processAll() {
+  const btn=document.getElementById('proc-btn');
+  const todo=S.imgs.filter(i=>i.status!=='done');
+  if (!todo.length){toast('Tất cả đã xử lý rồi','info');return;}
+  btn.disabled=true; btn.innerHTML='<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.3)"></div> Đang xử lý…';
+  const bar=document.getElementById('prog-bar'),fill=document.getElementById('prog-fill');
+  bar.style.display='block'; let done=0;
+  for (const img of S.imgs) {
+    if (img.status!=='done'){
+      await runOCR(img.id);
+      done++; fill.style.width=Math.round(done/todo.length*100)+'%';
+      await new Promise(r=>setTimeout(r,600));
+    }
+  }
+  bar.style.display='none'; fill.style.width='0%';
+  btn.disabled=false; btn.innerHTML='🚀 OCR & Xử lý tất cả';
+  toast('✅ Hoàn thành tất cả!','ok');
+}
+
+function setSt(id,s,txt){
+  const img=S.imgs.find(i=>i.id===id); if(img)img.status=s;
+  const dot=document.getElementById('dot-'+id),st=document.getElementById('st-'+id);
+  const card=document.querySelector(`.card[data-id="${id}"]`);
+  if(dot)dot.className='sdot '+s; if(st)st.textContent=txt;
+  if(card){card.classList.remove('processing','done','error');if(s!=='pending')card.classList.add(s);}
+}
+
+function renderForm(id, data) {
+  const ctn=document.getElementById('flds-'+id);
+  const src=data._src||{};
+  const ci=pDate(data.tu_ngay||'',false), co=pDate(data.den_ngay||'',true);
+  const v=(k,fb='')=>eh(data[k]||fb);
+  const srcBadges=Object.entries(src).filter(([,s])=>s).map(([k,s])=>`<span class="stag ${s}">${k.replace(/_/g,' ')}: ${s}</span>`).join(' ');
+  ctn.innerHTML=`
+    ${srcBadges?`<div class="src-row"><span class="lbl">Nguồn:</span>${srcBadges}</div>`:''}
+    <div class="fgrid">
+      <div class="fgt">👤 Thông tin</div>
+      <div class="fl fc"><label>Họ và tên</label><input value="${v('ho_va_ten')}" data-f="ho_va_ten" data-id="${id}"></div>
+      <div class="fl"><label>Ngày sinh</label><input value="${v('ngay_sinh')}" placeholder="dd/mm/yyyy" data-f="ngay_sinh" data-id="${id}"></div>
+      <div class="fl"><label>Giới tính</label>
+        <select data-f="gioi_tinh" data-id="${id}">
+          <option value="" ${!data.gioi_tinh?'selected':''}>—</option>
+          <option value="Nam" ${data.gioi_tinh==='Nam'?'selected':''}>Nam</option>
+          <option value="Nữ" ${data.gioi_tinh==='Nữ'?'selected':''}>Nữ</option>
+        </select></div>
+      <div class="fgt">📄 Giấy tờ</div>
+      <div class="fl"><label>Loại</label>
+        <select data-f="loai_giay_to" data-id="${id}">
+          <option value="CCCD" ${data.loai_giay_to==='CCCD'?'selected':''}>CCCD</option>
+          <option value="CMND" ${data.loai_giay_to==='CMND'?'selected':''}>CMND</option>
+          <option value="Hộ chiếu" ${data.loai_giay_to==='Hộ chiếu'?'selected':''}>Hộ chiếu</option>
+        </select></div>
+      <div class="fl"><label>Số giấy tờ</label><input value="${v('so_giay_to')}" data-f="so_giay_to" data-id="${id}"></div>
+      <div class="fl"><label>Quốc gia</label><input value="${v('quoc_gia','VNM')}" data-f="quoc_gia" data-id="${id}"></div>
+      <div class="fl"><label>Quốc tịch</label><input value="${v('quoc_tich','VNM')}" data-f="quoc_tich" data-id="${id}"></div>
+      <div class="fgt">🏠 Địa chỉ</div>
+      <div class="fl fc"><label>Tỉnh/TP</label><input value="${v('tinh_tp')}" data-f="tinh_tp" data-id="${id}"></div>
+      <div class="fl"><label>Quận/Huyện</label><input value="${v('quan_huyen')}" data-f="quan_huyen" data-id="${id}"></div>
+      <div class="fl"><label>Phường/Xã</label><input value="${v('phuong_xa')}" data-f="phuong_xa" data-id="${id}"></div>
+      <div class="fl fc"><label>Địa chỉ chi tiết</label><input value="${v('dia_chi_chi_tiet')}" data-f="dia_chi_chi_tiet" data-id="${id}"></div>
+      <div class="fgt">📅 Lưu trú</div>
+      <div class="fl">
+        <label>Check-in</label>
+        <input value="${ci||v('tu_ngay')}" placeholder="15, 0302…" data-f="tu_ngay" data-id="${id}" oninput="pd(this,'phi-${id}',false)">
+        <div class="dhint" id="phi-${id}">${ci?'→ '+ci+' 15:00:00':''}</div>
+      </div>
+      <div class="fl">
+        <label>Check-out</label>
+        <input value="${co||v('den_ngay')}" placeholder="20, 1003…" data-f="den_ngay" data-id="${id}" oninput="pd(this,'pho-${id}',true)">
+        <div class="dhint" id="pho-${id}">${co?'→ '+co+' 11:00:00':''}</div>
+      </div>
+      <div class="fl"><label>Số phòng</label><input value="${v('ten_phong_khoa')}" data-f="ten_phong_khoa" data-id="${id}"></div>
+      <div class="fl"><label>Lý do</label><input value="${v('ly_do_luu_tru','Du Lịch')}" data-f="ly_do_luu_tru" data-id="${id}"></div>
+      <div class="fl"><label>Loại cư trú</label>
+        <select data-f="loai_cu_tru" data-id="${id}"><option value="Tạm trú" selected>Tạm trú</option><option value="Thường trú">Thường trú</option></select></div>
+      <div class="fl"><label>SĐT</label><input value="${v('so_dien_thoai')}" data-f="so_dien_thoai" data-id="${id}"></div>
+    </div>`;
+  ctn.querySelectorAll('[data-f]').forEach(el=>{
+    el.addEventListener('input',()=>sf(id,el.dataset.f,el.value));
+    el.addEventListener('change',()=>sf(id,el.dataset.f,el.value));
+  });
+}
+
+function pd(el,hid,isCO){const p=pDate(el.value,isCO),t=isCO?' 11:00:00':' 15:00:00';document.getElementById(hid).textContent=p?'→ '+p+t:(el.value?'⚠ Không nhận ra':'');}
+function sf(id,f,v){const img=S.imgs.find(i=>i.id===id);if(img&&img.data)img.data[f]=v;}
+
+function collectData() {
+  const rows=[]; let stt=1;
+  for (const img of S.imgs) {
+    if (img.status!=='done'||!img.data) continue;
+    const live={};
+    document.querySelectorAll(`[data-id="${img.id}"][data-f]`).forEach(el=>live[el.dataset.f]=el.value);
+    const d={...img.data,...live};
+    const ci=pDate(d.tu_ngay||'',false), co=pDate(d.den_ngay||'',true);
+    rows.push({
+      'STT':stt++,'Họ và tên (*)':d.ho_va_ten||'','Ngày, tháng, năm sinh (*)':d.ngay_sinh||'',
+      'Giới tính (*)':d.gioi_tinh||'','Quốc gia (*)':d.quoc_gia||'','Quốc tịch (*)':d.quoc_tich||'',
+      'Loại giấy tờ (*)':d.loai_giay_to||'','Tên giấy tờ (*)':d.ten_giay_to||'','Số giấy tờ (*)':d.so_giay_to||'',
+      'Số điện thoại':d.so_dien_thoai||'','Loại cư trú (*)':d.loai_cu_tru||'Tạm trú',
+      'Tỉnh/TP (*)':d.tinh_tp||'','Quận/Huyện (*)':d.quan_huyen||'',
+      'Phường/Xã/Đặc khu (*)':d.phuong_xa||'','Địa chỉ chi tiết (*)':d.dia_chi_chi_tiet||'',
+      'Thời gian lưu trú (từ ngày) (*)':ci?ci+' 15:00:00':'',
+      'Thời gian lưu trú (đến ngày)':co?co+' 11:00:00':'',
+      'Lý do lưu trú (*)':d.ly_do_luu_tru||'','Tên phòng/Khoa (*)':d.ten_phong_khoa||'',
+    });
+  }
+  return rows;
+}
+
+function isVN(r){const qt=(r['Quốc tịch (*)']).toUpperCase(),l=(r['Loại giấy tờ (*)']).toUpperCase();return['VNM','VN'].includes(qt)&&(l.includes('CCCD')||l.includes('CMND'));}
+function isHC(r){const l=r['Loại giấy tờ (*)'];return l.includes('chiếu')||l.toLowerCase().includes('passport');}
+
+function renderResults() {
+  const rows=collectData(), rc=document.getElementById('res-c'), badge=document.getElementById('rbadge');
+  if (!rows.length){
+    rc.innerHTML='<div class="empty"><div class="eic">📋</div><p>Chưa có kết quả.<br>Upload ảnh và bấm OCR.</p></div>';
+    badge.style.display='none'; document.getElementById('stats').style.display='none';
+    ['b-csv','b-xml','b-xl'].forEach(id=>document.getElementById(id).disabled=true); return;
+  }
+  badge.textContent=rows.length; badge.style.display='';
+  ['b-csv','b-xml','b-xl'].forEach(id=>document.getElementById(id).disabled=false);
+  const vn=rows.filter(isVN),hc=rows.filter(isHC);
+  document.getElementById('st-tot').textContent=rows.length;
+  document.getElementById('st-vn').textContent=vn.length;
+  document.getElementById('st-hc').textContent=hc.length;
+  document.getElementById('stats').style.display='flex';
+  if (hc.length){
+    const qc={};hc.forEach(r=>{const q=r['Quốc tịch (*)']||'?';qc[q]=(qc[q]||0)+1;});
+    document.getElementById('st-qt').textContent=Object.entries(qc).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([q,n])=>q+':'+n).join(' ');
+    document.getElementById('st-qt-c').style.display='block';
+  }
+  const cols=['STT','Họ và tên (*)','Ngày, tháng, năm sinh (*)','Giới tính (*)','Quốc tịch (*)','Loại giấy tờ (*)','Số giấy tờ (*)','Thời gian lưu trú (từ ngày) (*)','Thời gian lưu trú (đến ngày)','Tên phòng/Khoa (*)'];
+  let html='<div class="tbl-wrap"><table><thead><tr>';
+  cols.forEach(c=>html+=`<th>${c.replace(' (*)','')}</th>`);
+  html+='</tr></thead><tbody>';
+  rows.forEach(r=>{
+    html+='<tr>';
+    cols.forEach(c=>{let v=r[c]||'';if(c==='Loại giấy tờ (*)'){const cl=v==='Hộ chiếu'?'b-hc':'b-vn';v=`<span class="bx ${cl}">${v}</span>`;}html+=`<td>${v}</td>`;});
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>'; rc.innerHTML=html;
+}
+
+// Export CSV — qua server (để đúng encoding BOM)
+async function expCSV() {
+  const rows=collectData(); if(!rows.length){toast('Không có dữ liệu','err');return;}
+  try {
+    const resp=await fetch('/api/export/csv',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(rows)});
+    if(!resp.ok){const e=await resp.json();throw new Error(e.error);}
+    const blob=await resp.blob();
+    dl2(blob,'output.csv'); toast('✅ CSV — '+rows.length+' dòng','ok');
+  } catch(e){toast('❌ '+e.message,'err');}
+}
+
+// Export XML — qua server (Python build XML)
+async function expXML() {
+  const rows=collectData(); if(!rows.length){toast('Không có dữ liệu','err');return;}
+  try {
+    const resp=await fetch('/api/export/xml',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(rows)});
+    if(!resp.ok){const e=await resp.json();throw new Error(e.error);}
+    const blob=await resp.blob();
+    dl2(blob,'pp.xml'); toast('✅ XML — khách Hộ chiếu','ok');
+  } catch(e){toast('❌ '+e.message,'err');}
+}
+
+// Export Excel — client-side SheetJS (không cần server)
+function expXL() {
+  const vn=collectData().filter(isVN);
+  if(!vn.length){toast('Không có khách VN (CCCD/CMND)','err');return;}
+  const H=Object.keys(vn[0]);
+  const ws=XLSX.utils.aoa_to_sheet([H,...vn.map(r=>H.map(h=>r[h]||''))]);
+  ws['!cols']=H.map(h=>({wch:Math.min(Math.max(h.length,14),42)}));
+  ws['!freeze']={xSplit:0,ySplit:1};
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Khai báo lưu trú');
+  XLSX.writeFile(wb,'vietnam.xlsx');
+  toast('✅ Excel .xlsx — '+vn.length+' khách VN','ok');
+}
+
+function dl2(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();}
+function eh(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+let _tt;
+function toast(msg,type=''){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast show '+(type==='ok'?'ok':type==='err'?'err':'info');
+  clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),3200);
+}
+</script>
+</body>
+</html>
